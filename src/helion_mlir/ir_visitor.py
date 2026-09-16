@@ -41,6 +41,7 @@ from .mlir_utils import (
     format_string_attr,
     torch_dtype_to_mlir_element_type,
     format_memref_type,
+    format_to_tensor,
 )
 from .torch_mlir_helper import (
     TorchMLIRNodeImporter,
@@ -1411,7 +1412,7 @@ class IRVisitor:
         # Emit bufferization.to_tensor to convert memref view to tensor
         result = self.mlir_output_helper.fresh("tile")
         self.mlir_output_helper.emit(
-            f'{result} = bufferization.to_tensor {subview_ssa} : {subview_type} to {tensor_type}'
+            format_to_tensor(result, subview_ssa, subview_type, tensor_type)
         )
         
         self.ctx.node_values[node.name] = result

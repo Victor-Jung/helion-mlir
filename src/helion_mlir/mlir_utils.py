@@ -141,3 +141,15 @@ def format_attr_dict(attrs: dict[str, str | None]) -> str:
     if not items:
         return ""
     return " {" + ", ".join(items) + "}"
+
+
+def format_to_tensor(result: str, source: str, source_type: str, result_type: str) -> str:
+    """Format a `bufferization.to_tensor` for a read-only tile load.
+
+    The `restrict` attribute is mandatory: One-Shot Analysis rejects to_tensor
+    ops without it ("to_tensor ops without `restrict` are not supported by
+    One-Shot Analysis"). It asserts the produced tensor aliases nothing else,
+    which holds here because the source is a freshly-created subview that is
+    only read.
+    """
+    return f"{result} = bufferization.to_tensor {source} restrict : {source_type} to {result_type}"
