@@ -947,9 +947,9 @@ class IRVisitor:
         for i, a in enumerate(args):
             if isinstance(a, fx.Node):
                 ssa = self.ctx.node_values.get(a.name, f"%{a.name}")
-                all_args_info.append((f"acc_iter{i}", ssa, a.name))
+                all_args_info.append((f"acc_iter{i}_b{block_id}", ssa, a.name))
             else:
-                all_args_info.append((f"acc_iter{i}", str(a), None))
+                all_args_info.append((f"acc_iter{i}_b{block_id}", str(a), None))
 
         iter_args_info = []
         for info_tuple in all_args_info:
