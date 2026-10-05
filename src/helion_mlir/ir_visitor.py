@@ -2698,7 +2698,10 @@ class IRVisitor:
         if "val" in node.meta:
             val = node.meta["val"]
             if hasattr(val, "shape"):
-                self.ctx.node_types[node.name] = self.ctx.compute_mlir_type_from_fake_tensor(val)
+                self.ctx.node_types[node.name] = self._merge_static_dims(
+                    self.ctx.compute_mlir_type_from_fake_tensor(val),
+                    self.mlir_output_helper.emitted_result_type(result) or imported_result_type,
+                )
             elif imported_result_type is not None:
                 self.ctx.node_types[node.name] = imported_result_type
             elif hasattr(val, "dtype"):
@@ -2980,6 +2983,29 @@ class IRVisitor:
             converted = [self._create_precise_import_value_from_meta(elem) for elem in val]
             return tuple(converted) if isinstance(val, tuple) else converted
         return val
+
+    @staticmethod
+    def _merge_static_dims(fake_type: str, imported_type: str | None) -> str:
+        """Fill dynamic dims of ``fake_type`` from the same-rank emitted type.
+
+        A full-extent slice such as ``k[:, :]`` carries block-size symbols
+        whose size is not an int, so the fake tensor reports ``?`` where the
+        emitted op, typed from its resolved operands, already knows the extent.
+        """
+        import re
+
+        if imported_type is None or "?" not in fake_type:
+            return fake_type
+        pat = re.compile(r"^tensor<((?:[\d?]+x)*)(\w+)>$")
+        fake_m, imp_m = pat.match(fake_type), pat.match(imported_type)
+        if not fake_m or not imp_m or fake_m.group(2) != imp_m.group(2):
+            return fake_type
+        fake_dims = [d for d in fake_m.group(1).split("x") if d]
+        imp_dims = [d for d in imp_m.group(1).split("x") if d]
+        if len(fake_dims) != len(imp_dims):
+            return fake_type
+        merged = [i if f == "?" and i != "?" else f for f, i in zip(fake_dims, imp_dims)]
+        return f"tensor<{'x'.join(merged + [fake_m.group(2)])}>"
 
     @staticmethod
     def _extract_imported_result_type(mlir_text: str) -> str | None:

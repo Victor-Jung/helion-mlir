@@ -45,6 +45,34 @@ class MLIROutputHelper:
         self._tmp_counter += 1
         return name
 
+    def emitted_result_type(self, ssa: str) -> str | None:
+        """Return the result type of the already emitted op defining ``ssa``.
+
+        Single-line ops carry ``-> type`` (or ``: type`` for ops without an
+        arrow); a region op's result type sits on its closing ``} -> type``.
+        """
+        import re
+
+        prefix = f"{ssa} = "
+        for idx in range(len(self._lines) - 1, -1, -1):
+            line = self._lines[idx].lstrip()
+            if not line.startswith(prefix):
+                continue
+            if line.rstrip().endswith("{"):
+                depth = 1
+                for closing in self._lines[idx + 1 :]:
+                    stripped = closing.strip()
+                    depth += stripped.count("{") - stripped.count("}")
+                    if depth == 0:
+                        line = stripped
+                        break
+            match = re.search(r"->\s*(tensor<[^>]*>)\s*$", line)
+            if match:
+                return match.group(1)
+            match = re.search(r":\s*(tensor<[^>]*>)\s*$", line)
+            return match.group(1) if match else None
+        return None
+
     def build(self) -> str:
         """Build and return the complete MLIR text."""
         return "\n".join(self._lines) + "\n"
