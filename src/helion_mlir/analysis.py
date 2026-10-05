@@ -377,6 +377,22 @@ def build_kernel_analysis(
                 continue
             loop_extents[child_canonical] = parent_extent
 
+    # One symbol per canonical block; distinct blocks that share a debug
+    # name (several `hl.tile(n)` loops) get a numbered suffix.
+    symbol_names: dict[int, str] = {}
+    taken_names: set[str] = set()
+    for info in bound_kernel.env.block_sizes:
+        canonical_id = alias.get(info.block_id, info.block_id)
+        if canonical_id in symbol_names or canonical_id not in used_canonical_ids:
+            continue
+        base = next(iter(info.debug_names), f"block_{canonical_id}")
+        name, k = base, 1
+        while name in taken_names:
+            name = f"{base}_{k}"
+            k += 1
+        taken_names.add(name)
+        symbol_names[canonical_id] = name
+
     module_attributes: dict[str, tuple[object, str]] = {}
     seen_canonical: set[int] = set()
     for info in bound_kernel.env.block_sizes:
@@ -389,7 +405,7 @@ def build_kernel_analysis(
         upper_bound = natural_upper_bounds.get(info.block_id)
         if upper_bound is None:
             continue
-        sym_name = next(iter(info.debug_names), f"block_{canonical_id}")
+        sym_name = symbol_names[canonical_id]
         module_attributes[f"loom.{sym_name}"] = (
             f"{{upper_bound = {upper_bound} : index, "
             f"is_reduction = {str(info.reduction).lower()}, "
@@ -487,6 +503,7 @@ def build_kernel_analysis(
             natural_upper_bounds=natural_upper_bounds,
             used_block_ids=frozenset(used_block_ids),
             used_canonical_block_ids=frozenset(used_canonical_ids),
+            symbol_names=symbol_names,
         ),
         host_tensors=HostTensorInfo(
             tensor_types=host_tensor_types,

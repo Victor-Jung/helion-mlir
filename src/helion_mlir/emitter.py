@@ -51,7 +51,8 @@ class ModuleEmitter:
                 self.session.block_size_ssa[info.block_id] = self.session.block_size_ssa[canonical_id]
                 continue
             emitted_canonical.add(canonical_id)
-            sym_name = next(iter(info.debug_names), f"block_{canonical_id}")
+            sym_name = self.session.analysis.block_info.symbol_names.get(
+                canonical_id, next(iter(info.debug_names), f"block_{canonical_id}"))
             ssa = f"%{sym_name}"
             if isinstance(info.size, int):
                 self.builder.emit(f"{ssa} = arith.constant {info.size} : index")

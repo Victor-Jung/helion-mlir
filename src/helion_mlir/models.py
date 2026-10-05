@@ -19,6 +19,7 @@ class BlockInfoSummary:
     natural_upper_bounds: dict[int, int]
     used_block_ids: frozenset[int]
     used_canonical_block_ids: frozenset[int]
+    symbol_names: dict[int, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
