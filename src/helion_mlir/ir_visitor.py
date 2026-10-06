@@ -409,7 +409,7 @@ class IRVisitor:
                 hex_val = self._get_hex_constant(fill_value, dtype_str)
                 self.mlir_output_helper.emit(f'{cst_ssa} = arith.constant {hex_val} : {dtype_str}')
             else:
-                self.mlir_output_helper.emit(f'{cst_ssa} = arith.constant {self._mlir_float(fill_value)} : {dtype_str}')
+                self.mlir_output_helper.emit(f'{cst_ssa} = arith.constant {self._mlir_float(fill_value, dtype_str)} : {dtype_str}')
             self.ctx.node_values[node.name] = cst_ssa
             self.ctx.node_types[node.name] = dtype_str  # "f16", NOT "tensor<f16>"
             return cst_ssa
@@ -464,7 +464,7 @@ class IRVisitor:
             self.mlir_output_helper.emit(f'{fill_val_ssa} = arith.constant {hex_val} : {dtype_str}')
         else:
             # Regular float value
-            self.mlir_output_helper.emit(f'{fill_val_ssa} = arith.constant {self._mlir_float(fill_value)} : {dtype_str}')
+            self.mlir_output_helper.emit(f'{fill_val_ssa} = arith.constant {self._mlir_float(fill_value, dtype_str)} : {dtype_str}')
         
         # Step 3: Emit linalg.fill
         filled_ssa = self.mlir_output_helper.fresh("filled")
@@ -549,7 +549,7 @@ class IRVisitor:
             self.mlir_output_helper.emit(f'{fill_val_ssa} = arith.constant {hex_val} : {dtype_str}')
         else:
             # Regular float value
-            self.mlir_output_helper.emit(f'{fill_val_ssa} = arith.constant {self._mlir_float(fill_value)} : {dtype_str}')
+            self.mlir_output_helper.emit(f'{fill_val_ssa} = arith.constant {self._mlir_float(fill_value, dtype_str)} : {dtype_str}')
         
         # Step 3: Emit linalg.fill
         filled_ssa = self.mlir_output_helper.fresh("filled")
@@ -2988,10 +2988,15 @@ class IRVisitor:
         return val
 
     @staticmethod
-    def _mlir_float(value) -> str:
-        """A float literal MLIR parses: Python prints 1e-05 as '1e-05', which the
-        parser rejects (no mantissa dot); '1.000000e-05' is accepted. Ints and
-        floats with a plain repr pass through."""
+    def _mlir_float(value, dtype_str: str = "") -> str:
+        """A literal MLIR parses for the given type: an int fill of a float type
+        (torch.zeros_like) must print as a float, and Python prints 1e-05 as
+        '1e-05', which the parser rejects (no mantissa dot)."""
+        is_float_type = dtype_str.startswith(("f", "bf"))
+        if isinstance(value, bool):
+            return str(int(value))
+        if isinstance(value, int) and is_float_type:
+            return f"{float(value):.6e}"
         if isinstance(value, float) and "e" in repr(value) and "." not in repr(value).split("e")[0]:
             return f"{value:.6e}"
         return str(value)
