@@ -409,7 +409,7 @@ class IRVisitor:
                 hex_val = self._get_hex_constant(fill_value, dtype_str)
                 self.mlir_output_helper.emit(f'{cst_ssa} = arith.constant {hex_val} : {dtype_str}')
             else:
-                self.mlir_output_helper.emit(f'{cst_ssa} = arith.constant {fill_value} : {dtype_str}')
+                self.mlir_output_helper.emit(f'{cst_ssa} = arith.constant {self._mlir_float(fill_value)} : {dtype_str}')
             self.ctx.node_values[node.name] = cst_ssa
             self.ctx.node_types[node.name] = dtype_str  # "f16", NOT "tensor<f16>"
             return cst_ssa
@@ -464,7 +464,7 @@ class IRVisitor:
             self.mlir_output_helper.emit(f'{fill_val_ssa} = arith.constant {hex_val} : {dtype_str}')
         else:
             # Regular float value
-            self.mlir_output_helper.emit(f'{fill_val_ssa} = arith.constant {fill_value} : {dtype_str}')
+            self.mlir_output_helper.emit(f'{fill_val_ssa} = arith.constant {self._mlir_float(fill_value)} : {dtype_str}')
         
         # Step 3: Emit linalg.fill
         filled_ssa = self.mlir_output_helper.fresh("filled")
@@ -549,7 +549,7 @@ class IRVisitor:
             self.mlir_output_helper.emit(f'{fill_val_ssa} = arith.constant {hex_val} : {dtype_str}')
         else:
             # Regular float value
-            self.mlir_output_helper.emit(f'{fill_val_ssa} = arith.constant {fill_value} : {dtype_str}')
+            self.mlir_output_helper.emit(f'{fill_val_ssa} = arith.constant {self._mlir_float(fill_value)} : {dtype_str}')
         
         # Step 3: Emit linalg.fill
         filled_ssa = self.mlir_output_helper.fresh("filled")
@@ -1500,12 +1500,15 @@ class IRVisitor:
                 # Full dimension slice - offset=0 (static), size comes from value tensor dim
                 offsets.append(("0", True))
                 
-                # Check if value tensor's dimension is static
+                # The value tensor only has the retained destination dims:
+                # scalar indices squeeze theirs, so this slice is the value's
+                # dim number `len(retained_dim_positions)`, not `i`.
+                value_dim = len(retained_dim_positions)
                 src_dim_static = None
-                if i < len(src_dims):
-                    if src_dims[i] != '?':
+                if value_dim < len(src_dims):
+                    if src_dims[value_dim] != '?':
                         try:
-                            src_dim_static = int(src_dims[i])
+                            src_dim_static = int(src_dims[value_dim])
                         except ValueError:
                             pass
                 
@@ -1515,7 +1518,7 @@ class IRVisitor:
                 else:
                     # Dynamic - need tensor.dim on value tensor
                     dim_idx_ssa = self.mlir_output_helper.fresh("dim_idx")
-                    self.mlir_output_helper.emit(f'{dim_idx_ssa} = arith.constant {i} : index')
+                    self.mlir_output_helper.emit(f'{dim_idx_ssa} = arith.constant {value_dim} : index')
                     dim_ssa = self.mlir_output_helper.fresh("dim")
                     self.mlir_output_helper.emit(f'{dim_ssa} = tensor.dim {value_ssa}, {dim_idx_ssa} : {value_type}')
                     sizes.append((dim_ssa, False))
@@ -2983,6 +2986,15 @@ class IRVisitor:
             converted = [self._create_precise_import_value_from_meta(elem) for elem in val]
             return tuple(converted) if isinstance(val, tuple) else converted
         return val
+
+    @staticmethod
+    def _mlir_float(value) -> str:
+        """A float literal MLIR parses: Python prints 1e-05 as '1e-05', which the
+        parser rejects (no mantissa dot); '1.000000e-05' is accepted. Ints and
+        floats with a plain repr pass through."""
+        if isinstance(value, float) and "e" in repr(value) and "." not in repr(value).split("e")[0]:
+            return f"{value:.6e}"
+        return str(value)
 
     @staticmethod
     def _merge_static_dims(fake_type: str, imported_type: str | None) -> str:
